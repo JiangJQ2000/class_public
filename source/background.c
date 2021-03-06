@@ -2102,11 +2102,11 @@ int background_initial_conditions(
       pvecback_integration[pba->index_bi_phi_prime_scf] = pba->phi_prime_ini_scf;
     }
     class_test(!isfinite(pvecback_integration[pba->index_bi_phi_scf]) ||
-               !isfinite(pvecback_integration[pba->index_bi_phi_scf]),
+               !isfinite(pvecback_integration[pba->index_bi_phi_prime_scf]),
                pba->error_message,
                "initial phi = %e phi_prime = %e -> check initial conditions",
                pvecback_integration[pba->index_bi_phi_scf],
-               pvecback_integration[pba->index_bi_phi_scf]);
+               pvecback_integration[pba->index_bi_phi_prime_scf]);
   }
 
   /* Infer pvecback from pvecback_integration */
