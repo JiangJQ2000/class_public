@@ -93,6 +93,13 @@ cdef extern from "class.h":
         double H_eq
         double z_eq
         double tau_eq
+        # FYCR
+        short attractor_ic_scf
+        double phi_ini_scf
+        double phi_prime_ini_scf
+        double * scf_parameters
+        int scf_parameters_size
+        int scf_tuning_index
 
     cdef struct thermo:
         ErrorMsg error_message

@@ -1383,7 +1383,7 @@ int input_read_parameters(
   }
 
   /* Additional SCF parameters: */
-  if (pba->Omega0_scf != 0.){
+  if (flag3){
     /** - Read parameters describing scalar field potential */
     class_call(parser_read_list_of_doubles(pfc,
                                            "scf_parameters",

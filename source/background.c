@@ -879,7 +879,7 @@ int background_indices(
   pba->has_ncdm = _FALSE_;
   pba->has_dcdm = _FALSE_;
   pba->has_dr = _FALSE_;
-  pba->has_scf = _FALSE_;
+  pba->has_scf = _TRUE_;
   pba->has_lambda = _FALSE_;
   pba->has_fld = _FALSE_;
   pba->has_ur = _FALSE_;
@@ -898,9 +898,6 @@ int background_indices(
     if (pba->Gamma_dcdm != 0.)
       pba->has_dr = _TRUE_;
   }
-
-  if (pba->Omega0_scf != 0.)
-    pba->has_scf = _TRUE_;
 
   if (pba->Omega0_lambda != 0.)
     pba->has_lambda = _TRUE_;
@@ -2456,16 +2453,6 @@ int background_derivs(
 
 /**
  * Scalar field potential and its derivatives with respect to the field _scf
- * For Albrecht & Skordis model: 9908085
- * - \f$ V = V_{p_{scf}}*V_{e_{scf}} \f$
- * - \f$ V_e =  \exp(-\lambda \phi) \f$ (exponential)
- * - \f$ V_p = (\phi - B)^\alpha + A \f$ (polynomial bump)
- *
- * TODO:
- * - Add some functionality to include different models/potentials (tuning would be difficult, though)
- * - Generalize to Kessence/Horndeski/PPF and/or couplings
- * - A default module to numerically compute the derivatives when no analytic functions are given should be added.
- * - Numerical derivatives may further serve as a consistency check.
  *
  */
 
@@ -2480,103 +2467,195 @@ int background_derivs(
  and \f$ \rho^{class} \f$ has the proper dimension \f$ Mpc^-2 \f$.
 */
 
-double V_e_scf(struct background *pba,
+double V_i_scf(struct background *pba,
                double phi
-               ) {
-  double scf_lambda = pba->scf_parameters[0];
-  //  double scf_alpha  = pba->scf_parameters[1];
-  //  double scf_A      = pba->scf_parameters[2];
-  //  double scf_B      = pba->scf_parameters[3];
+              )
+{
+    double scf_V = pba->scf_parameters[0];
+    double scf_Vads  = pba->scf_parameters[1];
 
-  return  exp(-scf_lambda*phi);
+    return  scf_V*phi*phi*phi*phi-scf_Vads;
 }
 
-double dV_e_scf(struct background *pba,
+double dV_i_scf(struct background *pba,
                 double phi
-                ) {
-  double scf_lambda = pba->scf_parameters[0];
-  //  double scf_alpha  = pba->scf_parameters[1];
-  //  double scf_A      = pba->scf_parameters[2];
-  //  double scf_B      = pba->scf_parameters[3];
+               )
+{
+    double scf_V = pba->scf_parameters[0];
+//    double scf_Vads  = pba->scf_parameters[1];
 
-  return -scf_lambda*V_scf(pba,phi);
+    return 4*scf_V*phi*phi*phi;
 }
 
-double ddV_e_scf(struct background *pba,
+double ddV_i_scf(struct background *pba,
                  double phi
-                 ) {
-  double scf_lambda = pba->scf_parameters[0];
-  //  double scf_alpha  = pba->scf_parameters[1];
-  //  double scf_A      = pba->scf_parameters[2];
-  //  double scf_B      = pba->scf_parameters[3];
+                )
+{
+    double scf_V = pba->scf_parameters[0];
 
-  return pow(-scf_lambda,2)*V_scf(pba,phi);
+    return 12*scf_V*phi*phi;
 }
 
+double V_c_scf(
+    struct background *pba,
+    double phi)
+{
+    double scf_V = pba->scf_parameters[0];
+    double scf_Vads  = pba->scf_parameters[1];
+    double scf_alpha  = pba->scf_parameters[3];
+    double x1 = (1-scf_alpha)*pow(scf_Vads/scf_V,0.25);
+    double x2 = (1+scf_alpha) / (1-scf_alpha) * x1;
+    double V = V_i_scf(pba,x1);
+    double dV = dV_i_scf(pba,x1);
+    double ddV = ddV_i_scf(pba,x1);
+    double a0 = -(20*V*pow(x1,2)*pow(x2,3) - 8*dV*pow(x1,3)*pow(x2,3) +
+                  ddV*pow(x1,4)*pow(x2,3) - 10*V*x1*pow(x2,4) + 10*dV*pow(x1,2)*pow(x2,4) -
+                  2*ddV*pow(x1,3)*pow(x2,4) + 2*V*pow(x2,5) - 2*dV*x1*pow(x2,5) +
+                  ddV*pow(x1,2)*pow(x2,5))/(2.*pow(x1 - x2,5));
+    double a1 = -(-60*V*pow(x1,2)*pow(x2,2) + 24*dV*pow(x1,3)*pow(x2,2) -
+                  3*ddV*pow(x1,4)*pow(x2,2) - 16*dV*pow(x1,2)*pow(x2,3) +
+                  4*ddV*pow(x1,3)*pow(x2,3) - 10*dV*x1*pow(x2,4) + ddV*pow(x1,2)*pow(x2,4) +
+                  2*dV*pow(x2,5) - 2*ddV*x1*pow(x2,5))/(2.*pow(x1 - x2,5));
+    double a2 = -(x2*(60*V*pow(x1,2) - 24*dV*pow(x1,3) + 3*ddV*pow(x1,4) + 60*V*x1*x2 -
+                      12*dV*pow(x1,2)*x2 + 36*dV*x1*pow(x2,2) - 8*ddV*pow(x1,2)*pow(x2,2) +
+                      4*ddV*x1*pow(x2,3) + ddV*pow(x2,4)))/(2.*pow(x1 - x2,5));
+    double a3 = -(-20*V*pow(x1,2) + 8*dV*pow(x1,3) - ddV*pow(x1,4) - 80*V*x1*x2 +
+                  32*dV*pow(x1,2)*x2 - 4*ddV*pow(x1,3)*x2 - 20*V*pow(x2,2) -
+                  28*dV*x1*pow(x2,2) + 8*ddV*pow(x1,2)*pow(x2,2) - 12*dV*pow(x2,3) -
+                  3*ddV*pow(x2,4))/(2.*pow(x1 - x2,5));
+    double a4 = -(30*V*x1 - 14*dV*pow(x1,2) + 2*ddV*pow(x1,3) + 30*V*x2 - 2*dV*x1*x2 -
+                  ddV*pow(x1,2)*x2 + 16*dV*pow(x2,2) - 4*ddV*x1*pow(x2,2) + 3*ddV*pow(x2,3))/
+                (2.*pow(x1 - x2,5));
+    double a5 = -(-12*V + 6*dV*x1 - ddV*pow(x1,2) - 6*dV*x2 + 2*ddV*x1*x2 - ddV*pow(x2,2))/
+                (2.*pow(x1 - x2,5));
 
-/** parameters and functions for the polynomial coefficient
- * \f$ V_p = (\phi - B)^\alpha + A \f$(polynomial bump)
- *
- * double scf_alpha = 2;
- *
- * double scf_B = 34.8;
- *
- * double scf_A = 0.01; (values for their Figure 2)
- */
-
-double V_p_scf(
-               struct background *pba,
-               double phi) {
-  //  double scf_lambda = pba->scf_parameters[0];
-  double scf_alpha  = pba->scf_parameters[1];
-  double scf_A      = pba->scf_parameters[2];
-  double scf_B      = pba->scf_parameters[3];
-
-  return  pow(phi - scf_B,  scf_alpha) +  scf_A;
+    return a0 + a1*phi + a2*pow(phi,2) + a3*pow(phi,3) + a4*pow(phi,4) + a5*pow(phi,5);
 }
 
-double dV_p_scf(
-                struct background *pba,
-                double phi) {
+double dV_c_scf(
+    struct background *pba,
+    double phi)
+{
+    double scf_V = pba->scf_parameters[0];
+    double scf_Vads  = pba->scf_parameters[1];
+    double scf_alpha  = pba->scf_parameters[3];
+    double x1 = (1-scf_alpha)*pow(scf_Vads/scf_V,0.25);
+    double x2 = (1+scf_alpha) / (1-scf_alpha) * x1;
+    double V = V_i_scf(pba,x1);
+    double dV = dV_i_scf(pba,x1);
+    double ddV = ddV_i_scf(pba,x1);
+//    double a0 = -(20*V*pow(x1,2)*pow(x2,3) - 8*dV*pow(x1,3)*pow(x2,3) +
+//                  ddV*pow(x1,4)*pow(x2,3) - 10*V*x1*pow(x2,4) + 10*dV*pow(x1,2)*pow(x2,4) -
+//                  2*ddV*pow(x1,3)*pow(x2,4) + 2*V*pow(x2,5) - 2*dV*x1*pow(x2,5) +
+//                  ddV*pow(x1,2)*pow(x2,5))/(2.*pow(x1 - x2,5));
+    double a1 = -(-60*V*pow(x1,2)*pow(x2,2) + 24*dV*pow(x1,3)*pow(x2,2) -
+                  3*ddV*pow(x1,4)*pow(x2,2) - 16*dV*pow(x1,2)*pow(x2,3) +
+                  4*ddV*pow(x1,3)*pow(x2,3) - 10*dV*x1*pow(x2,4) + ddV*pow(x1,2)*pow(x2,4) +
+                  2*dV*pow(x2,5) - 2*ddV*x1*pow(x2,5))/(2.*pow(x1 - x2,5));
+    double a2 = -(x2*(60*V*pow(x1,2) - 24*dV*pow(x1,3) + 3*ddV*pow(x1,4) + 60*V*x1*x2 -
+                      12*dV*pow(x1,2)*x2 + 36*dV*x1*pow(x2,2) - 8*ddV*pow(x1,2)*pow(x2,2) +
+                      4*ddV*x1*pow(x2,3) + ddV*pow(x2,4)))/(2.*pow(x1 - x2,5));
+    double a3 = -(-20*V*pow(x1,2) + 8*dV*pow(x1,3) - ddV*pow(x1,4) - 80*V*x1*x2 +
+                  32*dV*pow(x1,2)*x2 - 4*ddV*pow(x1,3)*x2 - 20*V*pow(x2,2) -
+                  28*dV*x1*pow(x2,2) + 8*ddV*pow(x1,2)*pow(x2,2) - 12*dV*pow(x2,3) -
+                  3*ddV*pow(x2,4))/(2.*pow(x1 - x2,5));
+    double a4 = -(30*V*x1 - 14*dV*pow(x1,2) + 2*ddV*pow(x1,3) + 30*V*x2 - 2*dV*x1*x2 -
+                  ddV*pow(x1,2)*x2 + 16*dV*pow(x2,2) - 4*ddV*x1*pow(x2,2) + 3*ddV*pow(x2,3))/
+                (2.*pow(x1 - x2,5));
+    double a5 = -(-12*V + 6*dV*x1 - ddV*pow(x1,2) - 6*dV*x2 + 2*ddV*x1*x2 - ddV*pow(x2,2))/
+                (2.*pow(x1 - x2,5));
 
-  //  double scf_lambda = pba->scf_parameters[0];
-  double scf_alpha  = pba->scf_parameters[1];
-  //  double scf_A      = pba->scf_parameters[2];
-  double scf_B      = pba->scf_parameters[3];
-
-  return   scf_alpha*pow(phi -  scf_B,  scf_alpha - 1);
+    return a1 + 2*a2*phi + 3*a3*pow(phi,2) + 4*a4*pow(phi,3) + 5*a5*pow(phi,4);
 }
 
-double ddV_p_scf(
-                 struct background *pba,
-                 double phi) {
-  //  double scf_lambda = pba->scf_parameters[0];
-  double scf_alpha  = pba->scf_parameters[1];
-  //  double scf_A      = pba->scf_parameters[2];
-  double scf_B      = pba->scf_parameters[3];
+double ddV_c_scf(
+    struct background *pba,
+    double phi)
+{
+    double scf_V = pba->scf_parameters[0];
+    double scf_Vads  = pba->scf_parameters[1];
+    double scf_alpha  = pba->scf_parameters[3];
+    double x1 = (1-scf_alpha)*pow(scf_Vads/scf_V,0.25);
+    double x2 = (1+scf_alpha) / (1-scf_alpha) * x1;
+    double V = V_i_scf(pba,x1);
+    double dV = dV_i_scf(pba,x1);
+    double ddV = ddV_i_scf(pba,x1);
+//    double a0 = -(20*V*pow(x1,2)*pow(x2,3) - 8*dV*pow(x1,3)*pow(x2,3) +
+//                  ddV*pow(x1,4)*pow(x2,3) - 10*V*x1*pow(x2,4) + 10*dV*pow(x1,2)*pow(x2,4) -
+//                  2*ddV*pow(x1,3)*pow(x2,4) + 2*V*pow(x2,5) - 2*dV*x1*pow(x2,5) +
+//                  ddV*pow(x1,2)*pow(x2,5))/(2.*pow(x1 - x2,5));
+//    double a1 = -(-60*V*pow(x1,2)*pow(x2,2) + 24*dV*pow(x1,3)*pow(x2,2) -
+//                  3*ddV*pow(x1,4)*pow(x2,2) - 16*dV*pow(x1,2)*pow(x2,3) +
+//                  4*ddV*pow(x1,3)*pow(x2,3) - 10*dV*x1*pow(x2,4) + ddV*pow(x1,2)*pow(x2,4) +
+//                  2*dV*pow(x2,5) - 2*ddV*x1*pow(x2,5))/(2.*pow(x1 - x2,5));
+    double a2 = -(x2*(60*V*pow(x1,2) - 24*dV*pow(x1,3) + 3*ddV*pow(x1,4) + 60*V*x1*x2 -
+                      12*dV*pow(x1,2)*x2 + 36*dV*x1*pow(x2,2) - 8*ddV*pow(x1,2)*pow(x2,2) +
+                      4*ddV*x1*pow(x2,3) + ddV*pow(x2,4)))/(2.*pow(x1 - x2,5));
+    double a3 = -(-20*V*pow(x1,2) + 8*dV*pow(x1,3) - ddV*pow(x1,4) - 80*V*x1*x2 +
+                  32*dV*pow(x1,2)*x2 - 4*ddV*pow(x1,3)*x2 - 20*V*pow(x2,2) -
+                  28*dV*x1*pow(x2,2) + 8*ddV*pow(x1,2)*pow(x2,2) - 12*dV*pow(x2,3) -
+                  3*ddV*pow(x2,4))/(2.*pow(x1 - x2,5));
+    double a4 = -(30*V*x1 - 14*dV*pow(x1,2) + 2*ddV*pow(x1,3) + 30*V*x2 - 2*dV*x1*x2 -
+                  ddV*pow(x1,2)*x2 + 16*dV*pow(x2,2) - 4*ddV*x1*pow(x2,2) + 3*ddV*pow(x2,3))/
+                (2.*pow(x1 - x2,5));
+    double a5 = -(-12*V + 6*dV*x1 - ddV*pow(x1,2) - 6*dV*x2 + 2*ddV*x1*x2 - ddV*pow(x2,2))/
+                (2.*pow(x1 - x2,5));
 
-  return  scf_alpha*(scf_alpha - 1.)*pow(phi -  scf_B,  scf_alpha - 2);
+    return 2*a2 + 6*a3*phi + 12*a4*pow(phi,2) + 20*a5*pow(phi,3);
 }
 
 /** Fianlly we can obtain the overall potential \f$ V = V_p*V_e \f$
  */
 
 double V_scf(
-             struct background *pba,
-             double phi) {
-  return  V_e_scf(pba,phi)*V_p_scf(pba,phi);
+    struct background *pba,
+    double phi)
+{
+    double scf_V = pba->scf_parameters[0];
+    double scf_Vads  = pba->scf_parameters[1];
+    double scf_alpha  = pba->scf_parameters[3];
+    double x1 = (1-scf_alpha)*pow(scf_Vads/scf_V,0.25);
+    double x2 = (1+scf_alpha) / (1-scf_alpha) * x1;
+    if (phi<x1)
+        return V_i_scf(pba,phi);
+    else if (phi<x2)
+        return V_c_scf(pba,phi);
+    else
+        return 0.;
 }
 
 double dV_scf(
-              struct background *pba,
-              double phi) {
-  return dV_e_scf(pba,phi)*V_p_scf(pba,phi) + V_e_scf(pba,phi)*dV_p_scf(pba,phi);
+    struct background *pba,
+    double phi)
+{
+    double scf_V = pba->scf_parameters[0];
+    double scf_Vads  = pba->scf_parameters[1];
+    double scf_alpha  = pba->scf_parameters[3];
+    double x1 = (1-scf_alpha)*pow(scf_Vads/scf_V,0.25);
+    double x2 = (1+scf_alpha) / (1-scf_alpha) * x1;
+    if (phi<x1)
+        return dV_i_scf(pba,phi);
+    else if (phi<x2)
+        return dV_c_scf(pba,phi);
+    else
+        return 0.;
 }
 
 double ddV_scf(
-               struct background *pba,
-               double phi) {
-  return ddV_e_scf(pba,phi)*V_p_scf(pba,phi) + 2*dV_e_scf(pba,phi)*dV_p_scf(pba,phi) + V_e_scf(pba,phi)*ddV_p_scf(pba,phi);
+    struct background *pba,
+    double phi)
+{
+    double scf_V = pba->scf_parameters[0];
+    double scf_Vads  = pba->scf_parameters[1];
+    double scf_alpha  = pba->scf_parameters[3];
+    double x1 = (1-scf_alpha)*pow(scf_Vads/scf_V,0.25);
+    double x2 = (1+scf_alpha) / (1-scf_alpha) * x1;
+    if (phi<x1)
+        return ddV_i_scf(pba,phi);
+    else if (phi<x2)
+        return ddV_c_scf(pba,phi);
+    else
+        return 0.;
 }
 
 /**

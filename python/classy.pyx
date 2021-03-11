@@ -1408,6 +1408,55 @@ cdef class Class:
         free(data)
         return background
 
+    def get_energy_injection(self):
+        """
+        Return the parameters of the energy injection.
+
+        Parameters
+        ----------
+
+        Returns
+        -------
+        z_c, f_scf
+        """
+        cdef char *titles
+        cdef double* data
+        titles = <char*>calloc(_MAXTITLESTRINGLENGTH_,sizeof(char))
+
+        if background_output_titles(&self.ba, titles)==_FAILURE_:
+            raise CosmoSevereError(self.ba.error_message)
+
+        tmp = <bytes> titles
+        tmp = str(tmp.decode())
+        names = tmp.split("\t")[:-1]
+        number_of_titles = len(names)
+        timesteps = self.ba.bt_size
+
+        data = <double*>malloc(sizeof(double)*timesteps*number_of_titles)
+
+        if background_output_data(&self.ba, number_of_titles, data)==_FAILURE_:
+            raise CosmoSevereError(self.ba.error_message)
+
+        background = {}
+
+        for i in range(number_of_titles):
+            background[names[i]] = np.zeros(timesteps, dtype=np.double)
+            for index in range(timesteps):
+                background[names[i]][index] = data[index*number_of_titles+i]
+
+
+        i_max = np.argmax(background['(.)rho_scf'][background['z'] > self.th.z_rec]/
+                                       background['H [1/Mpc]'][background['z'] > self.th.z_rec]**2)
+        z_c = background['z'][background['z'] > self.th.z_rec][i_max]
+
+        f_scf = np.max(background['(.)rho_scf'][background['z'] > self.th.z_rec]/
+                                    background['H [1/Mpc]'][background['z'] > self.th.z_rec]**2)
+
+        free(titles)
+        free(data)
+
+        return z_c, f_scf
+
     def get_thermodynamics(self):
         """
         Return the thermodynamics quantities.
@@ -1686,6 +1735,16 @@ cdef class Class:
                 value = self.ba.Omega0_m
             elif name == 'omega_m':
                 value = self.ba.Omega0_m*self.ba.h**2
+            elif name == 'Omega_scf':
+                value = self.ba.Omega0_scf
+            elif name == 'V_2_scf':
+                value = self.ba.scf_parameters[3]
+            elif name == 'z_c_scf':
+                z_c, f_scf = self.get_energy_injection()
+                value = z_c
+            elif name == 'f_scf':
+                z_c, f_scf = self.get_energy_injection()
+                value = f_scf
             elif name == 'xi_idr':
                 value = self.ba.T_idr/self.ba.T_cmb
             elif name == 'N_dg':

@@ -3161,6 +3161,10 @@ int perturb_prepare_k_output(struct background * pba,
       class_store_columntitle(ppt->scalar_titles, "delta_rho_fld", pba->has_fld);
       class_store_columntitle(ppt->scalar_titles, "rho_plus_p_theta_fld", pba->has_fld);
       class_store_columntitle(ppt->scalar_titles, "delta_p_fld", pba->has_fld);
+      /* KG-EDIT FYCR-QDM Add the field perturbations and its derivative */
+      class_store_columntitle(ppt->scalar_titles, "delta_phi_scf", pba->has_scf);
+      class_store_columntitle(ppt->scalar_titles, "delta_phi_prime_scf", pba->has_scf);
+      class_store_columntitle(ppt->scalar_titles, "rf_cs2_scf", pba->has_scf);
 
       ppt->number_of_scalar_titles =
         get_number_of_titles(ppt->scalar_titles);
@@ -5156,6 +5160,13 @@ int perturb_initial_conditions(struct precision * ppr,
         rho_r += ppw->pvecback[pba->index_bg_rho_ncdm1 + n_ncdm];
         rho_nu += ppw->pvecback[pba->index_bg_rho_ncdm1 + n_ncdm];
       }
+    }
+
+    /*KG-EDIT FYCR-QDM Add scalar field contribution */
+    if (pba->has_scf == _TRUE_) {
+      rho_r += 3.*ppw->pvecback[pba->index_bg_p_scf];
+      //rho_nu += 3.*ppw->pvecback[pba->index_bg_p_scf];
+      rho_m += ppw->pvecback[pba->index_bg_rho_scf] - 3.* ppw->pvecback[pba->index_bg_p_scf];
     }
 
     class_test(rho_r == 0.,
@@ -7728,7 +7739,10 @@ int perturb_print_variables(double tau,
   double delta_dr=0.,theta_dr=0.,shear_dr=0., f_dr=1.0;
   double delta_ur=0.,theta_ur=0.,shear_ur=0.,l4_ur=0.;
   double delta_idr=0., theta_idr=0., shear_idr=0.;
-  double delta_rho_scf=0., rho_plus_p_theta_scf=0.;
+  /*KG-EDIT added delta_p_scf*/
+  double delta_rho_scf=0., delta_p_scf=0., rho_plus_p_theta_scf=0.;
+  /*KG-EDIT FYCR-QDM add the field value and its derivative */
+  double delta_phi_scf=0.,delta_phi_prime_scf=0., rf_cs2_scf=0.,ad_cs2_scf=0.;
   double delta_scf=0., theta_scf=0.;
   /** - ncdm sector begins */
   int n_ncdm;
@@ -8006,19 +8020,39 @@ int perturb_print_variables(double tau,
         delta_rho_scf =  1./3.*
           (1./a2*ppw->pvecback[pba->index_bg_phi_prime_scf]*y[ppw->pv->index_pt_phi_prime_scf]
            + ppw->pvecback[pba->index_bg_dV_scf]*y[ppw->pv->index_pt_phi_scf]);
+        /*KG-EDIT added delta p scf*/
+        delta_p_scf =  1./3.*
+          (1./a2*ppw->pvecback[pba->index_bg_phi_prime_scf]*y[ppw->pv->index_pt_phi_prime_scf]
+          - ppw->pvecback[pba->index_bg_dV_scf]*y[ppw->pv->index_pt_phi_scf]);
       }
       else{
         delta_rho_scf =  1./3.*
           (1./a2*ppw->pvecback[pba->index_bg_phi_prime_scf]*y[ppw->pv->index_pt_phi_prime_scf]
            + ppw->pvecback[pba->index_bg_dV_scf]*y[ppw->pv->index_pt_phi_scf]
            - 1./a2*pow(ppw->pvecback[pba->index_bg_phi_prime_scf],2)*ppw->pvecmetric[ppw->index_mt_psi]);
+        /*KG-EDIT added delta p scf */
+        delta_p_scf =  1./3.*
+          (1./a2*ppw->pvecback[pba->index_bg_phi_prime_scf]*y[ppw->pv->index_pt_phi_prime_scf]
+           - ppw->pvecback[pba->index_bg_dV_scf]*y[ppw->pv->index_pt_phi_scf]
+           - 1./a2*pow(ppw->pvecback[pba->index_bg_phi_prime_scf],2)*ppw->pvecmetric[ppw->index_mt_psi]);
       }
+      /* KG_EDIT FYCR-QDM Extract delta_phi and delta_phi prime */
+      delta_phi_scf = y[ppw->pv->index_pt_phi_scf];
+      delta_phi_prime_scf = y[ppw->pv->index_pt_phi_prime_scf];
 
       rho_plus_p_theta_scf =  1./3.*
         k*k/a2*ppw->pvecback[pba->index_bg_phi_prime_scf]*y[ppw->pv->index_pt_phi_scf];
 
       delta_scf = delta_rho_scf/pvecback[pba->index_bg_rho_scf];
       theta_scf = rho_plus_p_theta_scf/(pvecback[pba->index_bg_rho_scf]+pvecback[pba->index_bg_p_scf]);
+
+      /* Adiabatic sound speed of the scalar field */
+      ad_cs2_scf = (-3.*a*H*pvecback[pba->index_bg_phi_prime_scf]
+		    - 2.*a2*pvecback[pba->index_bg_dV_scf])/(-3.*a*H*pvecback[pba->index_bg_phi_prime_scf]);
+      /* Rest frame sound speed of the scalar field */
+      rf_cs2_scf = ((delta_p_scf/delta_rho_scf)*delta_scf + 3.*ad_cs2_scf*(1 +
+		    pvecback[pba->index_bg_p_scf]/pvecback[pba->index_bg_rho_scf])*a*H*theta_scf/(k*k))/(delta_scf
+		    + 3.*(1 + pvecback[pba->index_bg_p_scf]/pvecback[pba->index_bg_rho_scf])*a*H*theta_scf/(k*k));
 
     }
 
@@ -8071,8 +8105,13 @@ int perturb_print_variables(double tau,
       }
 
       if (pba->has_scf == _TRUE_) {
-        delta_scf += alpha*(-3.0*H*(1.0+pvecback[pba->index_bg_p_scf]/pvecback[pba->index_bg_rho_scf]));
+        //delta_scf += alpha*(-3.0*H*pvecback[pba->index_bg_a]*(1.0+pvecback[pba->index_bg_p_scf]/pvecback[pba->index_bg_rho_scf]));
+	      /* KG-EDIT FYCR-QDM Remove assumption that our scalar field satisfies the standard continuity equation */
+	      delta_scf += (1./3.)*alpha*pvecback[pba->index_bg_phi_prime_scf]*(-3.*H*pvecback[pba->index_bg_phi_prime_scf]/a)/pvecback[pba->index_bg_rho_scf];
         theta_scf += k*k*alpha;
+        /* FYCR-QDM Transform to Newtonian gauge */
+        delta_phi_scf += alpha*pvecback[pba->index_bg_phi_prime_scf];
+        delta_phi_prime_scf += (pvecmetric[ppw->index_mt_alpha_prime]*pvecback[pba->index_bg_phi_prime_scf] + alpha*(-2.*a*H*pvecback[pba->index_bg_phi_prime_scf] - a2*pvecback[pba->index_bg_dV_scf]));
       }
 
     }
@@ -8148,6 +8187,10 @@ int perturb_print_variables(double tau,
     class_store_double(dataptr, ppw->delta_rho_fld, pba->has_fld, storeidx);
     class_store_double(dataptr, ppw->rho_plus_p_theta_fld, pba->has_fld, storeidx);
     class_store_double(dataptr, ppw->delta_p_fld, pba->has_fld, storeidx);
+    /* KG-EDIT FYCR-QDM add delta phi and delta phi prime to output */
+    class_store_double(dataptr, delta_phi_scf, pba->has_scf, storeidx);
+    class_store_double(dataptr, delta_phi_prime_scf, pba->has_scf, storeidx);
+    class_store_double(dataptr, rf_cs2_scf, pba->has_scf, storeidx);
     //fprintf(ppw->perturb_output_file,"\n");
 
   }

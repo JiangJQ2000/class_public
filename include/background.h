@@ -104,6 +104,9 @@ struct background
   //double scf_alpha;  /**< \f$ \alpha \f$ : Albrecht-Skordis polynomial slope */
   //double scf_B; /**< \f$ \alpha \f$ : Albrecht-Skordis field shift */
   //double scf_A; /**< \f$ \alpha \f$ : Albrecht-Skordis offset */
+  /* KG-EDIT 2/5/20 */
+  double rho_rad_0;         /** Initial density in radiation */
+  double a_initial;         /** Initial value of the scale factor */
 
   double Omega0_k; /**< \f$ \Omega_{0_k} \f$: curvature contribution */
 
