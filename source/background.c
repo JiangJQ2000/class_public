@@ -846,7 +846,7 @@ int background_free_input(
       free(pba->ncdm_psd_parameters);
   }
 
-  if (pba->Omega0_scf != 0.){
+  if (pba->has_scf==_TRUE_){
     if (pba->scf_parameters != NULL)
       free(pba->scf_parameters);
   }
